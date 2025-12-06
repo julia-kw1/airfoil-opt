@@ -29,66 +29,68 @@ CTRL_HISTORY_PATH = DATA_DIR / "control_deltas_history.pkl"
 SURROGATE_MODELS_DIR = DATA_DIR / "surrogate_models"
 
 # --- XFOIL ANALYSIS PARAMETERS ---
-ALPHA_START = 0.0
-ALPHA_END = 20.0
+ALPHA_START = -4.0
+ALPHA_END = 18.0
 ALPHA_STEP = 1.0
 MACH_NUMBER = 0.20
 REYNOLDS_NUMBER = 5e6
 PANEL_POINTS = 120
 
 # --- LHS (INITIAL SAMPLING) PARAMETERS ---
-LHS_SAMPLES = 10
-LHS_Y_BOUND = 0.05
+LHS_SAMPLES = 20
+LHS_Y_BOUND = 0.08
 LHS_X_BOUND = 0.05
 
 # --- FFD (GEOMETRY DEFORMATION) PARAMETERS ---
 FFD_NX = 10
-FFD_NY = 4
+FFD_NY = 6
 FFD_PAD_X = 0.05
 FFD_PAD_Y = 0.08
 ENABLE_X_DOFS = True
 
 # --- OPTIMIZER (SLSQP) PARAMETERS ---
-OPT_Y_BOUND = 0.05
-OPT_X_BOUND = 0.05
+OPT_Y_BOUND = 0.03
+OPT_X_BOUND = 0.03
 MAX_SLSQP_ITERS = 500
 # increase to make optimization more creative
-EXPLORATION_FACTOR = 1.5
+EXPLORATION_FACTOR = 0.6
 FTOL = 1e-7
 EPSILON = 1e-3
 
 # --- ACTIVE LEARNING LOOP PARAMETERS ---
-ACTIVE_MAX_ITERS = 10
+ACTIVE_MAX_ITERS = 5
 REUSE_LHS_RESULTS = False
 # increase to loosen optimization convergence criteria
-ACTIVE_J_TOL = 5e-4
-ACTIVE_UNCERTAINTY_TOL = 0.09  
+ACTIVE_J_TOL = 1e-4
+ACTIVE_UNCERTAINTY_TOL = 0.09
 
 # --- ADVANCED GP HYPERPARAMETER OPTIMIZATION ---
 USE_ADVANCED_CONVERGENCE = True
-# increase to lower regret tolerance
-EI_REGRET_TOLERANCE = 5e-5
-CONFIDENCE_LEVEL = 0.90
+# increase to loosen regret tolerance
+EI_REGRET_TOLERANCE = 1e-3
+CONFIDENCE_LEVEL = 0.95
 PAC_PROBABILITY_DELTA = 0.05
 
 # --- OBJECTIVE FUNCTION WEIGHTS ---
 WEIGHTS = {
-    'w_alpha': 0.06,
-    'w_cl': 12.0,
-    'w_cd': 4.0,
-    'w_t_upper': 60.0,
-    'w_t_lower': 60.0,
+    'w_alpha': 1.0,
+    'w_cl': 1.0,
+    'w_cd': 0.5,
+    'w_cd0': 1.0,
+    'w_cm': 2.0,
+    'w_cm0': 0.5,
+    'w_cm_bonus': 0.0,
+    'alpha_target': 15.0,
+    'w_transition': 1.0,
+    'cd0_target': 0.01,
+    'cm_target': 0.0,
+    'cm0_target': -0.09,
+    'cm_tolerance': 0.01,
+    'w_t_upper': 40.0,
+    'w_t_lower': 40.0,
     'w_overlap': 1e4,
-    'w_cm': 18.0,
-    'cm_target': -0.03,
-    'w_cm0': 15.0,
-    'cm0_target': -0.05,
-    'cm_tolerance': 0.1,
-    'w_transition': 20.0,
-    'xtr_min': 0.25,
+    'xtr_min': 0.4,
     'w_recovery': 15.0,
-    'w_cd0': 30.0,
-    'cd0_target': 0.007,
     'w_detach': 20.0,
-    'xtr_detach_min': 0.45,
+    'xtr_detach_min': 0.5,
 }
