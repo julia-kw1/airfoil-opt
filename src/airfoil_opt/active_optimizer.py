@@ -18,8 +18,10 @@ from .geometry_utils import thickness_ratio
 from .lhs_engine import run_lhs_sampling
 
 def load_pickle_required(path: Path):
-    if not path.exists(): raise FileNotFoundError(f"required file not found: {path}")
-    with path.open("rb") as f: return pickle.load(f)
+    if not path.exists():
+        raise FileNotFoundError(f"required file not found: {path}")
+    with path.open("rb") as f:
+        return pickle.load(f)
 
 class ActiveAirfoilOptimizer:
     """orchestrates the ego optimization pipeline."""
@@ -49,7 +51,8 @@ class ActiveAirfoilOptimizer:
     def _setup_directories(self):
         config.IMAGES_DIR.mkdir(exist_ok=True)
         config.DATA_DIR.mkdir(exist_ok=True)
-        if config.OPTIMAL_DIR.exists(): shutil.rmtree(config.OPTIMAL_DIR)
+        if config.OPTIMAL_DIR.exists():
+            shutil.rmtree(config.OPTIMAL_DIR)
         (config.OPTIMAL_DIR / "dat").mkdir(parents=True)
         (config.OPTIMAL_DIR / "input").mkdir(parents=True)
         (config.OPTIMAL_DIR / "polar").mkdir(parents=True)
@@ -71,7 +74,8 @@ class ActiveAirfoilOptimizer:
         
         self.best_lhs = self._get_best_record()
         self.initial_best_lhs = deepcopy(self.best_lhs)
-        if not self.best_lhs: raise RuntimeError("no converged lhs samples found.")
+        if not self.best_lhs:
+            raise RuntimeError("no converged lhs samples found.")
         print(f"lhs phase complete. best initial design: {self.best_lhs.get('name')} (J={self.best_lhs.get('J'):.4f})")
 
     def _step_3_active_loop(self):
@@ -86,6 +90,7 @@ class ActiveAirfoilOptimizer:
             surrogate = train_surrogate_models(self.lhs_results)
             
             seed_idx = best_before_iter.get("params", {}).get("seed_idx", 0)
+            current_best_before = best_before_iter.get('J', float('inf'))
             
             new_design = run_gradient_refinement(
                 best_lhs=best_before_iter,
@@ -96,10 +101,13 @@ class ActiveAirfoilOptimizer:
                 lhs_results=self.lhs_results
             )
 
+            self.lhs_results.append(new_design)
+            with config.LHS_RESULTS_PATH.open("wb") as f: pickle.dump(self.lhs_results, f)
+
             # check for convergence
             converged, gap, regret = False, None, None
             if new_design.get("xfoil", {}).get("converged"):
-                converged, gap, regret = self._check_advanced_convergence(new_design, surrogate)
+                converged, gap, regret = self._check_advanced_convergence(new_design, surrogate, current_best_before)
             
             # store diagnostics
             self.convergence_diagnostics.append({
@@ -107,9 +115,6 @@ class ActiveAirfoilOptimizer:
                 'optimality_gap': gap,
                 'max_expected_improvement': regret
             })
-
-            self.lhs_results.append(new_design)
-            with config.LHS_RESULTS_PATH.open("wb") as f: pickle.dump(self.lhs_results, f)
 
             if converged:
                 break
@@ -129,11 +134,10 @@ class ActiveAirfoilOptimizer:
         )
 
     def _get_best_record(self):
-        # filters out records that failed xfoil before finding the minimum
         converged_results = [r for r in self.lhs_results if r.get("J") is not None]
         return min(converged_results, key=lambda r: r["J"]) if converged_results else {}
     
-    def _check_advanced_convergence(self, new_design, surrogate):
+    def _check_advanced_convergence(self, new_design, surrogate, previous_best_J):
         max_ei = new_design.get('max_ei', float('inf'))
         print(f"max expected improvement (regret) from this iteration: {max_ei:.4e}")
         
@@ -145,20 +149,20 @@ class ActiveAirfoilOptimizer:
         for record in self.lhs_results:
             coords = record.get('xy')
             if coords is None: continue
-            
-            mu_pred = surrogate.predict(coords, return_std=False)
-            j_mu = score_design(mu_pred, coords, weights)
-
-            std_pred = surrogate.predict(coords, return_std=True)
-            cl_std = std_pred.get("cl_max_std", 0)
-            j_sigma = cl_std * weights.w_cl
-
+            pred_data = surrogate.predict(coords, return_std=True)
+            j_mu = score_design(pred_data, coords, weights)
+            cl_std = pred_data.get("CL_max_std", 0)
+            cd_std = pred_data.get("CD_std", 0)
+            alpha_std = pred_data.get("alpha_CL_max_std", 0)
+            ld_std = pred_data.get("LD_max_std", 0)
+            j_sigma = (weights.w_cl * cl_std + weights.w_cd * cd_std +
+                       weights.w_alpha * alpha_std + weights.w_cl * ld_std)
             lcb_values.append(j_mu - z_score * j_sigma)
 
         optimality_gap = None
-        if lcb_values:
+        if lcb_values and previous_best_J is not None:
             optimistic_best_J = min(lcb_values)
-            current_best_J = self._get_best_record().get('J', float('inf'))
+            current_best_J = previous_best_J
             optimality_gap = current_best_J - optimistic_best_J
             print(f"optimistic best J (LCB): {optimistic_best_J:.4f} | optimality gap: {optimality_gap:.4f}")
 

@@ -37,7 +37,7 @@ REYNOLDS_NUMBER = 5e6
 PANEL_POINTS = 120
 
 # --- LHS (INITIAL SAMPLING) PARAMETERS ---
-LHS_SAMPLES = 20
+LHS_SAMPLES = 15
 LHS_Y_BOUND = 0.08
 LHS_X_BOUND = 0.05
 
@@ -49,16 +49,16 @@ FFD_PAD_Y = 0.08
 ENABLE_X_DOFS = True
 
 # --- OPTIMIZER (SLSQP) PARAMETERS ---
-OPT_Y_BOUND = 0.03
+OPT_Y_BOUND = 0.05
 OPT_X_BOUND = 0.03
-MAX_SLSQP_ITERS = 500
+MAX_SLSQP_ITERS = 350
 # increase to make optimization more creative
-EXPLORATION_FACTOR = 0.6
+EXPLORATION_FACTOR = 0.9
 FTOL = 1e-7
-EPSILON = 1e-3
+EPSILON = 1.5e-3
 
 # --- ACTIVE LEARNING LOOP PARAMETERS ---
-ACTIVE_MAX_ITERS = 5
+ACTIVE_MAX_ITERS = 15
 REUSE_LHS_RESULTS = False
 # increase to loosen optimization convergence criteria
 ACTIVE_J_TOL = 1e-4
@@ -67,25 +67,24 @@ ACTIVE_UNCERTAINTY_TOL = 0.09
 # --- ADVANCED GP HYPERPARAMETER OPTIMIZATION ---
 USE_ADVANCED_CONVERGENCE = True
 # increase to loosen regret tolerance
-EI_REGRET_TOLERANCE = 1e-3
+EI_REGRET_TOLERANCE = 7e-4
 CONFIDENCE_LEVEL = 0.95
 PAC_PROBABILITY_DELTA = 0.05
 
 # --- OBJECTIVE FUNCTION WEIGHTS ---
 WEIGHTS = {
-    'w_alpha': 1.0,
-    'w_cl': 1.0,
+    'w_alpha': 0.6,
+    'w_cl': 0.8,
     'w_cd': 0.5,
     'w_cd0': 1.0,
     'w_cm': 2.0,
     'w_cm0': 0.5,
-    'w_cm_bonus': 0.0,
     'alpha_target': 15.0,
     'w_transition': 1.0,
     'cd0_target': 0.01,
-    'cm_target': 0.0,
+    'cm_target': -0.02,
     'cm0_target': -0.09,
-    'cm_tolerance': 0.01,
+    'cm_tolerance': 0.0001,
     'w_t_upper': 40.0,
     'w_t_lower': 40.0,
     'w_overlap': 1e4,

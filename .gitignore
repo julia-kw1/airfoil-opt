@@ -12,11 +12,16 @@ __pycache__/
 polar_files/
 /Xfoil699src/
 /surrogate_models/
+/src/post/
+working_config_file.txt
+regen_plots.py
 
 # Pickle files (can be large and are generated artifacts)
 *.pkl
 *.exe
 *.log
+AGENTS.md 
+learning_curve_plot.py
 
 # IDE and OS specific files
 .vscode/

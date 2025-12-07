@@ -1,6 +1,4 @@
-"""
-Objective function and weights for optimization.
-"""
+"""Objective function and weights for optimization."""
 import numpy as np
 from dataclasses import dataclass
 from typing import Dict, Any
@@ -29,17 +27,24 @@ def score_design(xfoil_result: Dict[str, Any], coords: np.ndarray, weights: Weig
     cd0 = float(xfoil_result.get('CD_alpha0', np.nan))
     cm0 = float(xfoil_result.get('CM_alpha0', np.nan))
 
-    # base CL penalty (strong penalty for non-converged or low-lift cases)
-    base_penalty = -cl * weights.w_cl if np.isfinite(cl) and cl > 0.5 else 1e3
+    is_prediction = 'converged' not in xfoil_result
+
+    if not is_prediction and not xfoil_result['converged']:
+        return 1e5
+    
+    if np.isfinite(cl) and cl > 0.3:
+        base_penalty = -cl * weights.w_cl
+    elif is_prediction:
+        base_penalty = -cl * weights.w_cl if np.isfinite(cl) else 0.0
+    else:
+        base_penalty = 1e3
 
     # stall angle penalty (and small bonus for exceeding target)
-    alpha_target = 16.0
     if np.isfinite(alpha):
-        delta = max(0.0, alpha_target - alpha)
-        alpha_penalty = weights.w_alpha * (delta**2)
-        alpha_bonus = -0.5 * weights.w_alpha * max(0.0, min(alpha - alpha_target, 4.0))**2
+        delta = max(0.0, weights.alpha_target - alpha)
+        alpha_penalty = weights.w_alpha * delta**2
     else:
-        alpha_penalty, alpha_bonus = weights.w_alpha * (alpha_target**2), 0.0
+        alpha_penalty = weights.w_alpha * weights.alpha_target**2
 
     # drag penalties (at CL_max and at alpha=0)
     cd_penalty = weights.w_cd * (cd if np.isfinite(cd) and cd > 0 else 0.1)
@@ -53,10 +58,14 @@ def score_design(xfoil_result: Dict[str, Any], coords: np.ndarray, weights: Weig
 
     # pitching moment penalties (at CL_max and at alpha=0)
     cm_val = cm if np.isfinite(cm) else -0.15
-    cm_excess = abs(cm_val - weights.cm_target) - weights.cm_tolerance
+    cm_delta = abs(cm_val - weights.cm_target)
+    cm_excess = cm_delta - weights.cm_tolerance
     cm_penalty = weights.w_cm * (cm_excess**2) if cm_excess > 0 else 0.0
+
     cm0_val = cm0 if np.isfinite(cm0) else -0.15
-    cm0_penalty = weights.w_cm0 * (cm0_val - weights.cm0_target)**2
+    cm0_delta = abs(cm0_val - weights.cm0_target)
+    cm0_excess = cm0_delta - weights.cm_tolerance
+    cm0_penalty = weights.w_cm0 * (cm0_excess**2) if cm0_excess > 0 else 0.0
     
     # boundary layer transition penalty
     top_xtr = float(xfoil_result.get('Top_Xtr', np.nan))
@@ -74,7 +83,7 @@ def score_design(xfoil_result: Dict[str, Any], coords: np.ndarray, weights: Weig
         detach_penalty = weights.w_detach * (detach_amt * (1.0 + alpha_gap / max(1.0, alpha_target)))**2
     """
     total = sum([
-        base_penalty, alpha_penalty, alpha_bonus, cd_penalty, cd0_penalty,
+        base_penalty, alpha_penalty, cd_penalty, cd0_penalty,
         cm_penalty, cm0_penalty, t_upper_penalty, t_lower_penalty,
         overlap_penalty, trans_penalty #W detach_penalty
     ])

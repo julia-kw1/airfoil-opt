@@ -38,8 +38,8 @@ class GaussianProcessSurrogate:
     A single-output Gaussian Process Regression model.
     """
     
-    def __init__(self, length_scale: float = 1.0, signal_variance: float = 1.0, 
-                 noise_variance: float = 1e-6):
+    def __init__(self, length_scale: float = 1.0, signal_variance: float = 5.0, 
+                 noise_variance: float = 1e-4):
         self.length_scale = length_scale
         self.signal_variance = signal_variance
         self.noise_variance = noise_variance
@@ -73,9 +73,6 @@ class GaussianProcessSurrogate:
     
     def fit(self, geometries: List[np.ndarray], aero_data: List[Dict], target_key: str):
         X, y = [], []
-        # --- THIS IS THE FIX ---
-        # We now process ALL data points. If a run failed, we assign a "safe" bad value
-        # to teach the surrogate that this geometry leads to a poor outcome.
         for coords, result in zip(geometries, aero_data):
             if not (np.all(np.isfinite(coords)) and coords.size > 0):
                 continue
@@ -87,11 +84,8 @@ class GaussianProcessSurrogate:
             if target_val is not None and np.isfinite(target_val):
                 X.append(features)
                 y.append(target_val)
-            # If the run failed, add it to the training set with a penalty value.
             elif not result.get('converged'):
                 X.append(features)
-                # Assign a sensible bad value. For CL_max, 0 is bad. For CD, a high number is bad.
-                # This helps the model learn to map this geometry to a poor result.
                 if 'CD' in target_key:
                     y.append(0.5) # High drag
                 else:
@@ -111,8 +105,8 @@ class GaussianProcessSurrogate:
         if self.y_scaler_std < 1e-8: self.y_scaler_std = 1.0
         self.y_train_scaled = (self.y_train - self.y_scaler_mean) / self.y_scaler_std
         
-        theta0 = np.log([self.length_scale, self.signal_variance, self.noise_variance])
-        bounds = [(-2, 4), (-4, 4), (-16, -2)]
+        theta0 = np.log([1.0, 5.0, 1e-4])
+        bounds = [(-2, 4), (-4, 4), (-12, -0)]
         
         result = minimize(self._negative_log_marginal_likelihood, theta0, method='L-BFGS-B', bounds=bounds)
         self.length_scale, self.signal_variance, self.noise_variance = np.exp(result.x)
@@ -157,7 +151,7 @@ class MultiOutputGP:
                 print(f"  [Warning] Could not train model for '{target}': {e}")
     
     def predict(self, coords: np.ndarray, return_std: bool = False) -> Dict[str, Any]:
-        results = {'converged': True}
+        results = {}
         for target, gp in self.models.items():
             try:
                 if return_std:

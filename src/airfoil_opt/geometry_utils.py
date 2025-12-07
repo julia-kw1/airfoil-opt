@@ -1,23 +1,24 @@
-"""Geometric utility functions for airfoil analysis."""
+"""geometric utility functions for airfoil analysis."""
 import numpy as np
 from typing import Tuple
 
 
 def normalize_unit_chord(coords: np.ndarray) -> np.ndarray:
-    """Scale airfoil to unit chord length."""
+    """scale an airfoil so its chord length equals one."""
     x = coords[:, 0]
-    chord = float(np.ptp(x))
+    x_min = float(np.min(x))
+    chord = float(np.max(x) - x_min)
     if chord <= 1e-6:
         return coords.copy()
-    
-    result = coords.copy()
-    result[:, 0] = (result[:, 0] - np.min(x)) / chord
-    result[:, 1] = result[:, 1] / chord
-    return result
+
+    normalized = coords.copy()
+    normalized[:, 0] = (normalized[:, 0] - x_min) / chord
+    normalized[:, 1] = normalized[:, 1] / chord
+    return normalized
 
 
 def split_upper_lower(coords: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Split airfoil into upper and lower surfaces (both LE->TE)."""
+    """split coordinates into upper and lower curves, both trailing->leading."""
     i_le = int(np.argmin(coords[:, 0]))
     upper = coords[:i_le + 1][::-1]
     lower = coords[i_le:]
@@ -25,69 +26,69 @@ def split_upper_lower(coords: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def thickness_ratio(coords: np.ndarray) -> float:
-    """Compute max thickness-to-chord ratio."""
+    """maximum thickness-to-chord ratio."""
     upper, lower = split_upper_lower(coords)
-    x_min = max(np.min(upper[:, 0]), np.min(lower[:, 0]))
-    x_max = min(np.max(upper[:, 0]), np.max(lower[:, 0]))
-    
+    x_min = max(float(np.min(upper[:, 0])), float(np.min(lower[:, 0])))
+    x_max = min(float(np.max(upper[:, 0])), float(np.max(lower[:, 0])))
+
     if x_max <= x_min:
         return np.nan
-    
+
     x_sample = np.linspace(x_min, x_max, 200)
     y_upper = np.interp(x_sample, upper[:, 0], upper[:, 1])
     y_lower = np.interp(x_sample, lower[:, 0], lower[:, 1])
-    
     return float(np.max(y_upper - y_lower))
 
 
 def extract_camberline(coords: np.ndarray, n_points: int = 200) -> np.ndarray:
-    """Extract camber line from airfoil coordinates."""
-    i_le = int(np.argmin(coords[:, 0]))
-    upper = coords[:i_le + 1][::-1]
-    lower = coords[i_le:]
-    
-    x_common = np.linspace(0, 1, n_points)
+    """camber line sampled across the chord."""
+    upper, lower = split_upper_lower(coords)
+    x_common = np.linspace(0.0, 1.0, n_points)
     y_upper = np.interp(x_common, upper[:, 0], upper[:, 1], left=np.nan, right=np.nan)
     y_lower = np.interp(x_common, lower[:, 0], lower[:, 1], left=np.nan, right=np.nan)
-    
-    valid = np.isfinite(y_upper) & np.isfinite(y_lower)
-    camber = np.column_stack((x_common[valid], 0.5 * (y_upper[valid] + y_lower[valid])))
-    
-    return camber
+
+    mask = np.isfinite(y_upper) & np.isfinite(y_lower)
+    return np.column_stack((x_common[mask], 0.5 * (y_upper[mask] + y_lower[mask])))
 
 
 def has_self_intersection(coords: np.ndarray) -> bool:
-    """Check for self-intersecting segments."""
+    """return true when the polyline intersects itself."""
     def ccw(a, b, c):
         return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-    
+
     def on_segment(a, b, c):
         return (min(a[0], b[0]) <= c[0] <= max(a[0], b[0]) and
                 min(a[1], b[1]) <= c[1] <= max(a[1], b[1]))
-    
+
     def segments_intersect(p1, p2, p3, p4):
         o1, o2 = ccw(p1, p2, p3), ccw(p1, p2, p4)
         o3, o4 = ccw(p3, p4, p1), ccw(p3, p4, p2)
-        
-        if o1 == 0 and on_segment(p1, p2, p3): return True
-        if o2 == 0 and on_segment(p1, p2, p4): return True
-        if o3 == 0 and on_segment(p3, p4, p1): return True
-        if o4 == 0 and on_segment(p3, p4, p2): return True
-        
+
+        if o1 == 0 and on_segment(p1, p2, p3):
+            return True
+        if o2 == 0 and on_segment(p1, p2, p4):
+            return True
+        if o3 == 0 and on_segment(p3, p4, p1):
+            return True
+        if o4 == 0 and on_segment(p3, p4, p2):
+            return True
+
         return (o1 > 0) != (o2 > 0) and (o3 > 0) != (o4 > 0)
-    
-    n = coords.shape[0]
-    for i in range(n - 1):
-        for j in range(i + 2, n - 1):
-            if i == 0 and j + 1 == n - 1:
-                continue
-            if segments_intersect(coords[i], coords[i+1], coords[j], coords[j+1]):
+
+    n_pts = coords.shape[0]
+    for i in range(n_pts - 1):
+        seg_start = coords[i]
+        seg_end = coords[i + 1]
+        for j in range(i + 2, n_pts - 1):
+            if i == 0 and j + 1 == n_pts - 1:
+                continue  # ignore closing segments that share endpoints
+            if segments_intersect(seg_start, seg_end, coords[j], coords[j + 1]):
                 return True
     return False
 
 
 def _cosine_spacing(n: int) -> np.ndarray:
-    """Return cosine-spaced samples from 0→1."""
+    """cosine-spaced samples between 0 and 1."""
     if n <= 1:
         return np.zeros(1)
     k = np.linspace(0.0, np.pi, n)
@@ -95,9 +96,8 @@ def _cosine_spacing(n: int) -> np.ndarray:
 
 
 def resample_airfoil(coords: np.ndarray, panel_points: int) -> np.ndarray:
-    """Resample airfoil using cosine spacing (dense near LE/TE)."""
+    """cosine resample with finer resolution near the edges."""
     panel_points = max(int(panel_points), 4)
-
     upper, lower = split_upper_lower(coords)
 
     n_upper = max(2, (panel_points + 2) // 2)
@@ -114,7 +114,6 @@ def resample_airfoil(coords: np.ndarray, panel_points: int) -> np.ndarray:
     upper_resampled = np.column_stack((x_upper, y_upper))
     lower_resampled = np.column_stack((x_lower, y_lower))
 
-    upper_TE2LE = upper_resampled[::-1]
-    lower_LE2TE = lower_resampled[1:]
-
-    return np.vstack((upper_TE2LE, lower_LE2TE))
+    upper_te2le = upper_resampled[::-1]  # keep upper surface in trailing->leading order
+    lower_le2te = lower_resampled[1:]
+    return np.vstack((upper_te2le, lower_le2te))

@@ -95,7 +95,6 @@ class SLSQPOptimizer:
         """
         def vec_to_coords(vec: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
             additional_deltas = unpack_dofs(mask, vec)
-            # THIS IS THE CRITICAL FIX: Sum the new change with the previous best
             total_deltas = base_deltas + additional_deltas
             coords = ffd_box.deform(base_coords, control_deltas=total_deltas)
             return normalize_unit_chord(coords), total_deltas
@@ -112,8 +111,11 @@ class SLSQPOptimizer:
         
         cl_std = aero_pred.get('CL_max_std', 0.0)
         cd_std = aero_pred.get('CD_std', 0.0)
-        # Composite uncertainty, weighted by importance in objective function
-        sigma_pred = max(self.weights.w_cl * cl_std + self.weights.w_cd * cd_std, 1e-6)
+        alpha_std = aero_pred.get('alpha_CL_max_std', 0.0)
+        ld_std = aero_pred.get('LD_max_std', 0.0)
+        sigma = (self.weights.w_cl * cl_std + self.weights.w_cd * cd_std +
+                 self.weights.w_alpha * alpha_std + self.weights.w_cl * ld_std)
+        sigma_pred = max(sigma, 1e-6)
         
 
         J_pred_norm = (J_pred - self.J_mean) / self.J_std
@@ -154,16 +156,16 @@ class SLSQPOptimizer:
         runner._write_airfoil_dat()
         runner._write_xfoil_input()
         
-        xfoil_out = runner._parse_polar() if runner._run_xfoil() else {"converged": False}
+        xfoil_out = runner._run_xfoil() and runner._parse_polar() or {"converged": False}
         J_final = score_design(xfoil_out, coords, self.weights)
-        
-        print(f"XFOIL Verified: J_actual={J_final:.3f}")
+        msg = "Verified" if xfoil_out.get("converged") else "did not converge"
+        print(f"XFOIL {msg}: J_actual={J_final:.3f}")
         return xfoil_out, J_final
 
 def _control_dof_mask(ffd):
     nx, ny, _ = ffd.control_points.shape
     mask = np.zeros((nx, ny, 2), dtype=bool)
-    mask[1:-1, :, 1] = True # y-displacements are active for all internal points
-    if config.ENABLE_X_DOFS: 
-        mask[1:-1, :, 0] = True # x-displacements if enabled
+    mask[1:-1, :, 1] = True  # y-displacements for interior points
+    if config.ENABLE_X_DOFS:
+        mask[1:-1, :, 0] = True  # optional x-shifts
     return mask

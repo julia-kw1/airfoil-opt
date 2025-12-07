@@ -4,11 +4,8 @@ XFOIL analysis runner and polar parser.
 import numpy as np
 import shutil
 import subprocess
-import platform
-import os
-import signal
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Optional
 from . import config
 
 class Analysis_Params:
@@ -43,7 +40,8 @@ class Xfoil_Analysis:
             d.mkdir(parents=True, exist_ok=True)
 
     def _write_airfoil_dat(self) -> bool:
-        if self.xy.ndim != 2 or self.xy.shape[1] != 2: return False
+        if self.xy.ndim != 2 or self.xy.shape[1] != 2:
+            return False
         with open(self.dat_file, "w") as f:
             f.write(f"{self.name}\n")
             np.savetxt(f, self.xy, fmt="%.7f")
@@ -81,9 +79,9 @@ class Xfoil_Analysis:
     
     def _run_xfoil(self, timeout: Optional[int] = 15) -> bool:
         exe = config.XFOIL_EXECUTABLE
-        if not shutil.which(exe): 
+        if not shutil.which(exe):
             return False
-        
+
         with open(self.input_file, "rb") as stdin_f:
             proc = subprocess.Popen([exe], stdin=stdin_f, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             try:
@@ -103,6 +101,11 @@ class Xfoil_Analysis:
             "CD_alpha0": np.nan, "CM_alpha0": np.nan, "converged": False
         }
         if not self.polar_file.exists():
+            print(f"XFOIL did not produce a polar file for {self.name}; treating as unconverged.")
+            return empty_result
+
+        if self.polar_file.stat().st_size == 0:
+            print(f"XFOIL polar file empty for {self.name}; treating as unconverged.")
             return empty_result
 
         try:
